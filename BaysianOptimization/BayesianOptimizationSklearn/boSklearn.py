@@ -13,6 +13,21 @@ import pickle
 
 
 noise_level = 1e-10
+
+
+# def blackBoxFunciton(x):
+#     #x -> 
+#     XXXXXXXXX
+#     [1 2 3 4 5 6]
+
+#     utility()
+    
+
+#     return 3.13
+
+
+
+
 class testFunctions:
     def __init__(self):
         self.dim = 5
@@ -25,7 +40,7 @@ class testFunctions:
         term3 = 100*(x[3]-x[2]**2)**2 + (1-x[2])**2
         term4 = 100*(x[4]-x[3]**2)**2 + (1-x[3])**2
         res = sum([term1,term2,term3,term4])
-        return res
+        return res #scalar
 
     def schwefel(self,x,noise_level=noise_level):
         term1 = 418.9829*len(x)
@@ -60,11 +75,14 @@ class testFunctions:
             return [(-5.12,5.12) for i in range(self.dim)]
 
 
-def boSklearn(funcName,iters,acqFunc,random_state=1):
+def boSklearn(iters,acqFunc,random_state=1, funcName="actualFunction",blackBox = None):
     #acq func  need to be: "EI", "LCB", "PI"
-    tFunc = testFunctions()
-    blackBox = tFunc.useTestFunction(funcName)
-    bounds = tFunc.getInputDomain(funcName)
+    if blackBox != None:
+        blackBox = blackBox
+    else:
+        tFunc = testFunctions()
+        blackBox = tFunc.useTestFunction(funcName)
+        bounds = tFunc.getInputDomain(funcName)
 
     runTitle = funcName + "_" + str(iters) + "_" + acqFunc+"_seed"+str(random_state)
 
@@ -98,11 +116,11 @@ def boSklearn(funcName,iters,acqFunc,random_state=1):
 if __name__ == "__main__":
     
 
-    print("seen")
-    boSklearn("rastrigin",500,"gp_hedge",3)
-    boSklearn("rosenbrock",500,"gp_hedge",3)
-    boSklearn("rastrigin",500,"gp_hedge",1)
-    boSklearn("schwefel",500,"gp_hedge",1)
+    # print("seen")
+    boSklearn(10,"gp_hedge",3, funcName="rastrigin")
+    # boSklearn(500,"gp_hedge",3, funcName="rosenbrock")
+    # boSklearn(500,"gp_hedge",1, funcName="rastrigin")
+    # boSklearn(500,"gp_hedge",1, funcName="schwefel")
     
 
     #boSklearn("schwefel",500,"gp_hedge",2)
