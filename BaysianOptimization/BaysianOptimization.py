@@ -4,6 +4,10 @@ import math
 import sys
 import matplotlib.pyplot as plt
 import random
+from bayes_opt.logger import JSONLogger
+from bayes_opt.event import Events
+import os
+from bayes_opt.util import load_logs
 
 dataPoints = [
   (1,(0,0,60,0,270.08960427),(15.1,20.7,387,72,None,0.282)),
@@ -50,7 +54,7 @@ class testFunctions:
     x = [x1,x2,x3,x4,x5]
     term1 = 10*self.dim
     term2 = sum([xi**2-10*math.cos(2*math.pi*xi) for xi in x])
-    res = term1 - term2
+    res = term1 + term2
     return -res
 
   def useTestFunction(self, testFunc):
@@ -71,18 +75,21 @@ class testFunctions:
 
 
 class BayesianOptimizationTestFunction:
-  def __init__(self, iterations=100, blackBoxFunction = "real", acquisitionFunc="ucb"):
+  def __init__(self, iterations=100, blackBoxFunction = "real", acquisitionFunc="ucb", kappa=2.5, loadData=False):
     self.testFunction = testFunctions()
     self.iterations = int(iterations)
     self.acquisitionFunc = acquisitionFunc
     self.blackBoxFunctionName = blackBoxFunction
+    self.kappa=kappa
     if blackBoxFunction == "real":   
       self.blackBoxFunctionUsed = self.blackBox
       self.inputDomain = [(0,1), (0,1), (-100,100),(-100,100),(-100,100)]
     else:
       self.blackBoxFunctionUsed = self.testFunction.useTestFunction(blackBoxFunction)
       self.inputDomain = self.testFunction.getInputDomain(blackBoxFunction)
-    self.title = "_".join([self.blackBoxFunctionName.capitalize(), self.acquisitionFunc, str(self.iterations)+"iterations"])
+    self.title = "_".join([self.blackBoxFunctionName.capitalize(), self.acquisitionFunc, str(self.iterations)+"iterations", str(self.kappa)+"kappa"])
+
+    self.loadData = loadData
 
   def utilityFunction(self, mod300,tensile,elongation,durometer,abrasion,rolling):
     return mod300
@@ -132,6 +139,13 @@ class BayesianOptimizationTestFunction:
       f.write(self.title+": "+ str(optimalOut)+" | "+str(optimalIn))
       f.write("\n")
 
+  # def writeLogFile(self,inputPoints,valsArr):
+  #   pass
+  #   with open('./manualLogFiles/'+self.title+'.txt', 'a') as f:
+  #     for i in range(len(valsArr)):
+  #       pass
+        
+
   def run(self, genGraph=True):
     '''
       iterations: int
@@ -140,7 +154,7 @@ class BayesianOptimizationTestFunction:
         -> String if want to run test black box functions
     
     '''
-
+    print("Running", self.title)
     optimizer = BayesianOptimization(
       f=self.blackBoxFunctionUsed, #can be set to None
       pbounds={
@@ -158,20 +172,33 @@ class BayesianOptimizationTestFunction:
     # smaller = prefer exploitation
     # larger = prefer exploration
     random.seed(1)
-    print(self.inputDomain[0][0], self.inputDomain[0][1])
-    print(random.randint(math.floor(self.inputDomain[0][0]), math.ceil(self.inputDomain[0][1])))
-    acquisition = UtilityFunction(kind=self.acquisitionFunc, kappa=2.5, xi=random.randint(math.floor(self.inputDomain[0][0]), math.ceil(self.inputDomain[0][1])))
-    
+    print("inital point: ", random.randint(math.floor(self.inputDomain[0][0]), math.ceil(self.inputDomain[0][1])))
+    acquisition = UtilityFunction(kind=self.acquisitionFunc, kappa=self.kappa, xi=random.randint(math.floor(self.inputDomain[0][0]), math.ceil(self.inputDomain[0][1])))
+    logFlag = False
+    try:
+      # New optimizer is loaded with previously seen points
+      load_logs(optimizer, logs=['./savedModels/'+self.title+'.json'])
+      print("loaded")
+      logFlag = True
+    except Exception as e:
+      logger = JSONLogger(path='./savedModels/'+self.title+'.json')
+      optimizer.subscribe(Events.OPTIMIZATION_STEP, logger)
+
 
     iterArr = []
+    inputPoints = []
     valsArr = []
     for i in range(self.iterations):
       next_point = optimizer.suggest(acquisition)
       target = self.blackBoxFunctionUsed(**next_point)
       optimizer.register(params=next_point, target=target)
       iterArr.append(i)
+      inputPoints.append(next_point)
       valsArr.append(target)
-      if i % 50 == 0:
+      if abs(target) < 0.01:
+        print ("Stopped Early at iteration", i)
+        break
+      if i % 250 == 0:
         print("iteration "+str(i)+":", "target:",target,"next point:",next_point)
     
     print("Finished Running")
@@ -179,6 +206,9 @@ class BayesianOptimizationTestFunction:
     if genGraph:
       self.graphTarget(iterArr,valsArr)
     self.writeData(optimizer.max['target'],optimizer.max['params'])
+    if logFlag:
+      pass
+      #self.writeLogFile(inputPoints,valsArr)
 
 if __name__ == "__main__":
 
@@ -200,12 +230,20 @@ if __name__ == "__main__":
 
   boClass = BayesianOptimizationTestFunction()
   arguements = sys.argv
+  kappa = 2.5
   if arguements[1] != "multiple":
     iterations = int(arguements[-1])
     functionToRun = arguements[1]
     acquisitionFunc = arguements[2]
-    boClass = BayesianOptimizationTestFunction(iterations=iterations, blackBoxFunction=functionToRun, acquisitionFunc=acquisitionFunc)    
-  else:
-    pass
+    boClass = BayesianOptimizationTestFunction(iterations=iterations, blackBoxFunction=functionToRun, acquisitionFunc=acquisitionFunc, kappa=kappa)  
+    boClass.run()
 
-  boClass.run()
+  else:
+    kappaList = [2.5,2.5,2.5,2.5,2.5,2.5,2.5,2.5,2.5]
+    iterationsList = [10000,10000,10000,10000,10000,10000,10000,10000,10000]
+    functionsToRunList = ['rosenbrock','rosenbrock','rosenbrock','rastrigin','rastrigin','rastrigin','schwefel','schwefel','schwefel']
+    acquisitionFuncsList = ['ucb', 'ei', 'poi', 'ucb', 'ei', 'poi','ucb', 'ei', 'poi',]
+    for i in range(len(kappaList)):
+      c = BayesianOptimizationTestFunction(iterations=iterationsList[i], blackBoxFunction=functionsToRunList[i], acquisitionFunc=acquisitionFuncsList[i], kappa=kappaList[i])
+      c.run()
+      print("------")    
